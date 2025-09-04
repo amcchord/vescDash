@@ -21,10 +21,13 @@ bool scanComplete = false;
 int selectedDeviceIndex = 0;
 bool isConnected = false;
 float vescVoltage = 0.0;
+float vescFetTemp = 0.0;
 unsigned long lastVoltageUpdate = 0;
 
 // Display update tracking to prevent flicker
 float lastDisplayedVoltage = -1.0;
+float lastDisplayedFetTemp = -1.0;
+int lastBatteryLevel = -1;
 bool needsFullRedraw = true;
 String lastStatusText = "";
 
@@ -153,15 +156,19 @@ void parseVESCResponse(uint8_t* data, size_t length) {
                 int16_t voltageRaw = (data[voltageIndex] << 8) | data[voltageIndex + 1];
                 vescVoltage = voltageRaw / 10.0;
                 
+                // FET temp is at position 3-4
+                int16_t tempFetRaw = (data[3] << 8) | data[4];
+                vescFetTemp = tempFetRaw / 10.0;
+                
                 Serial.printf("Voltage: %.1fV (raw: 0x%04X = %d)\n", 
                              vescVoltage, voltageRaw & 0xFFFF, voltageRaw);
+                Serial.printf("FET Temp: %.1f°C (%.1f°F)\n", 
+                             vescFetTemp, (vescFetTemp * 9.0 / 5.0) + 32.0);
                 lastVoltageUpdate = millis();
                 
-                // Also check FET temp and motor temp
-                int16_t tempFet = (data[3] << 8) | data[4];
+                // Also check motor temp
                 int16_t tempMotor = (data[5] << 8) | data[6];
-                Serial.printf("Temps: FET=%.1f°C Motor=%.1f°C\n", 
-                             tempFet/10.0, tempMotor/10.0);
+                Serial.printf("Motor Temp: %.1f°C\n", tempMotor/10.0);
             } else {
                 Serial.printf("Packet too short for voltage data (need 31, got %d)\n", length);
             }
@@ -412,55 +419,102 @@ void displayVoltage() {
         M5.Lcd.fillScreen(BLACK);
         
         // Draw static elements
-        M5.Lcd.setTextSize(3);
-        M5.Lcd.setTextColor(WHITE, BLACK);
-        M5.Lcd.setCursor(10, 50);
-        M5.Lcd.println("VESC Connected");
-        
+        // Small "VESC Connected" at top
         M5.Lcd.setTextSize(1);
         M5.Lcd.setTextColor(WHITE, BLACK);
-        M5.Lcd.setCursor(10, 210);
-        M5.Lcd.println("A:Disconnect B:Request C:Back");
+        M5.Lcd.setCursor(10, 10);
+        M5.Lcd.println("VESC Connected");
+        
+        // Button labels at bottom
+        M5.Lcd.setTextSize(1);
+        M5.Lcd.setTextColor(WHITE, BLACK);
+        M5.Lcd.setCursor(10, 220);
+        M5.Lcd.println("A:Disconnect  B:Request  C:Back");
         
         needsFullRedraw = false;
         lastDisplayedVoltage = -1.0; // Force voltage update
+        lastDisplayedFetTemp = -1.0; // Force temp update
+        lastBatteryLevel = -1; // Force battery update
         lastStatusText = ""; // Force status update
     }
     
-    // Only update voltage if changed
+    // Update voltage - large and centered
     if (abs(vescVoltage - lastDisplayedVoltage) > 0.05) { // Only update if change > 0.05V
         // Clear voltage area
-        M5.Lcd.fillRect(50, 100, 200, 50, BLACK);
+        M5.Lcd.fillRect(0, 70, 320, 60, BLACK);
         
-        M5.Lcd.setTextSize(4);
+        // Calculate center position for voltage text
+        M5.Lcd.setTextSize(6);
         M5.Lcd.setTextColor(GREEN, BLACK);
-        M5.Lcd.setCursor(50, 100);
-        M5.Lcd.printf("%.1fV", vescVoltage);
+        String voltageStr = String(vescVoltage, 1) + "V";
+        int textWidth = voltageStr.length() * 36; // Approximate width per char at size 6
+        int xPos = (320 - textWidth) / 2;
+        M5.Lcd.setCursor(xPos, 80);
+        M5.Lcd.print(voltageStr);
         
         lastDisplayedVoltage = vescVoltage;
     }
     
-    // Update status text
+    // Update FET temperature in Fahrenheit
+    float fetTempF = (vescFetTemp * 9.0 / 5.0) + 32.0;
+    if (abs(vescFetTemp - lastDisplayedFetTemp) > 0.5) { // Only update if change > 0.5°C
+        // Clear temp area
+        M5.Lcd.fillRect(0, 140, 320, 30, BLACK);
+        
+        M5.Lcd.setTextSize(2);
+        M5.Lcd.setTextColor(YELLOW, BLACK);
+        String tempStr = "FET: " + String(fetTempF, 1) + "°F";
+        int textWidth = tempStr.length() * 12; // Approximate width per char at size 2
+        int xPos = (320 - textWidth) / 2;
+        M5.Lcd.setCursor(xPos, 145);
+        M5.Lcd.print(tempStr);
+        
+        lastDisplayedFetTemp = vescFetTemp;
+    }
+    
+    // Update M5Stack battery level in lower right
+    int batteryLevel = M5.Axp.GetBatteryLevel();
+    if (abs(batteryLevel - lastBatteryLevel) > 2 || lastBatteryLevel == -1) { // Update if change > 2%
+        // Clear battery area (lower right)
+        M5.Lcd.fillRect(220, 195, 100, 20, BLACK);
+        
+        M5.Lcd.setTextSize(1);
+        // Color based on battery level
+        if (batteryLevel > 60) {
+            M5.Lcd.setTextColor(GREEN, BLACK);
+        } else if (batteryLevel > 20) {
+            M5.Lcd.setTextColor(YELLOW, BLACK);
+        } else {
+            M5.Lcd.setTextColor(RED, BLACK);
+        }
+        
+        M5.Lcd.setCursor(240, 200);
+        M5.Lcd.printf("M5: %d%%", batteryLevel);
+        
+        lastBatteryLevel = batteryLevel;
+    }
+    
+    // Update status text (data age) in lower left
     String statusText;
     unsigned long timeSinceUpdate = millis() - lastVoltageUpdate;
     if (timeSinceUpdate > 5000) {
-        statusText = "No data received";
+        statusText = "No data";
     } else {
-        statusText = String("Updated ") + String(timeSinceUpdate / 1000) + "s ago";
+        statusText = String(timeSinceUpdate / 1000) + "s ago";
     }
     
     // Only update status if changed
     if (statusText != lastStatusText) {
-        // Clear status area
-        M5.Lcd.fillRect(10, 180, 300, 25, BLACK);
+        // Clear status area (lower left)
+        M5.Lcd.fillRect(10, 195, 100, 20, BLACK);
         
-        M5.Lcd.setTextSize(2);
+        M5.Lcd.setTextSize(1);
         if (timeSinceUpdate > 5000) {
             M5.Lcd.setTextColor(RED, BLACK);
         } else {
-            M5.Lcd.setTextColor(WHITE, BLACK);
+            M5.Lcd.setTextColor(CYAN, BLACK);
         }
-        M5.Lcd.setCursor(10, 180);
+        M5.Lcd.setCursor(10, 200);
         M5.Lcd.print(statusText);
         
         lastStatusText = statusText;
