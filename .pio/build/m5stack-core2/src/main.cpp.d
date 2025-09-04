@@ -250,4 +250,38 @@
  .pio/libdeps/m5stack-core2/M5Core2/src/AXP192.h \
  .pio/libdeps/m5stack-core2/M5Core2/src/AXP2101.h \
  .pio/libdeps/m5stack-core2/M5Core2/src/INA3221.h \
- .pio/libdeps/m5stack-core2/M5Core2/src/RTC.h
+ .pio/libdeps/m5stack-core2/M5Core2/src/RTC.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLEDevice.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/bt/host/bluedroid/api/include/api/esp_gap_ble_api.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/bt/host/bluedroid/api/include/api/esp_bt_defs.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/bt/host/bluedroid/api/include/api/esp_gattc_api.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/bt/host/bluedroid/api/include/api/esp_gatt_defs.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/bt/include/esp32/include/esp_bt.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_system/include/esp_task.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include/esp_additions/freertos/FreeRTOSConfig.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLEServer.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/bt/host/bluedroid/api/include/api/esp_gatts_api.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLEUUID.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/bt/host/bluedroid/api/include/api/esp_gatt_defs.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLEAdvertising.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/RTOS.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_ringbuf/include/freertos/ringbuf.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLECharacteristic.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLEDescriptor.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLEValue.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLEService.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLESecurity.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLEAddress.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLEClient.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLERemoteService.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLERemoteCharacteristic.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLERemoteDescriptor.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLEAdvertisedDevice.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLEScan.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLEUtils.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLEUtils.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLEScan.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLEAdvertisedDevice.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLEClient.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLERemoteService.h \
+ /Users/austinmcchord/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLERemoteCharacteristic.h

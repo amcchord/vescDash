@@ -1,2 +1,3 @@
-m5stack/M5GFX@^0.1.15
 m5stack/M5Core2@^0.1.7
+ESP32 BLE Arduino@^2.0.0
+m5stack/M5GFX@^0.1.15
