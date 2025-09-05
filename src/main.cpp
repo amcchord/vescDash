@@ -9,6 +9,20 @@
 #include <vector>
 #include <string>
 
+// ============== USER CONFIGURABLE SETTINGS ==============
+// BLE Scan Settings
+const int BLE_SCAN_TIME_SECONDS = 3;        // How long to scan for BLE devices
+
+// VESC Data Refresh Settings  
+const int VESC_DATA_REFRESH_MS = 300;       // How often to request voltage data (milliseconds)
+const int VESC_DATA_STALE_TIMEOUT_MS = 5000; // When to show "No data" warning (milliseconds)
+
+// Display Update Thresholds
+const float VOLTAGE_UPDATE_THRESHOLD = 0.05;  // Only update display if voltage changes by this amount (volts)
+const float TEMP_UPDATE_THRESHOLD = 0.1;      // Only update display if temperature changes by this amount (°C)
+const int BATTERY_UPDATE_THRESHOLD = 1;       // Only update battery display if it changes by this percent
+// ========================================================
+
 // Structure to store BLE device information
 struct BLEDeviceInfo {
     String name;
@@ -30,6 +44,14 @@ float lastDisplayedFetTemp = -1.0;
 int lastBatteryLevel = -1;
 bool needsFullRedraw = true;
 String lastStatusText = "";
+
+// Reconnection tracking
+bool isReconnecting = false;
+unsigned long lastReconnectAttempt = 0;
+const int RECONNECT_INTERVAL_MS = 5000;  // Try to reconnect every 5 seconds
+int lastConnectedDeviceIndex = -1;  // Remember which device we were connected to
+unsigned long connectionStartTime = 0;  // Track when connection was established
+const int CONNECTION_GRACE_PERIOD_MS = 10000;  // Give 10 seconds grace period for initial data
 
 // VESC communication now handled by VescUart library
 
@@ -240,7 +262,14 @@ class MyClientCallbacks : public BLEClientCallbacks {
     
     void onDisconnect(BLEClient* pclient) {
         Serial.println("BLE Client Disconnected");
-        isConnected = false;
+        if (isConnected) {
+            // Unexpected disconnect - trigger reconnection
+            isConnected = false;
+            isReconnecting = true;
+            lastReconnectAttempt = millis();
+            needsFullRedraw = true;
+            Serial.println("Unexpected disconnect - will attempt reconnection");
+        }
     }
 };
 
@@ -345,6 +374,10 @@ bool connectToVESC(int deviceIndex) {
     delay(1000); // Allow notification setup to complete
     
     isConnected = true;
+    isReconnecting = false;  // Clear reconnecting flag
+    lastConnectedDeviceIndex = deviceIndex;  // Remember this device
+    connectionStartTime = millis();  // Start grace period timer
+    lastVoltageUpdate = millis();  // Initialize to prevent immediate timeout
     Serial.println("VESC connection fully established");
     
     // Test connection with COMM_ALIVE first (simpler command)
@@ -413,6 +446,40 @@ void displayDeviceList() {
     }
 }
 
+void displayReconnecting() {
+    // Show reconnecting message
+    if (needsFullRedraw) {
+        M5.Lcd.fillScreen(BLACK);
+        needsFullRedraw = false;
+    }
+    
+    M5.Lcd.setTextSize(3);
+    M5.Lcd.setTextColor(YELLOW, BLACK);
+    String msg = "Reconnecting...";
+    int textWidth = msg.length() * 18; // Approximate width per char at size 3
+    int xPos = (320 - textWidth) / 2;
+    M5.Lcd.setCursor(xPos, 100);
+    M5.Lcd.print(msg);
+    
+    // Show countdown to next attempt
+    unsigned long timeSinceAttempt = millis() - lastReconnectAttempt;
+    int secondsUntilNext = (RECONNECT_INTERVAL_MS - timeSinceAttempt) / 1000;
+    if (secondsUntilNext < 0) secondsUntilNext = 0;
+    
+    M5.Lcd.setTextSize(1);
+    M5.Lcd.setTextColor(WHITE, BLACK);
+    String status = "Next attempt in " + String(secondsUntilNext) + "s";
+    textWidth = status.length() * 6;
+    xPos = (320 - textWidth) / 2;
+    M5.Lcd.setCursor(xPos, 140);
+    M5.Lcd.fillRect(0, 140, 320, 20, BLACK); // Clear the line
+    M5.Lcd.print(status);
+    
+    // Button labels
+    M5.Lcd.setCursor(10, 220);
+    M5.Lcd.println("A:Cancel  B:Retry Now");
+}
+
 void displayVoltage() {
     // Only do full redraw when needed
     if (needsFullRedraw) {
@@ -439,7 +506,7 @@ void displayVoltage() {
     }
     
     // Update voltage - large and centered
-    if (abs(vescVoltage - lastDisplayedVoltage) > 0.05) { // Only update if change > 0.05V
+    if (abs(vescVoltage - lastDisplayedVoltage) > VOLTAGE_UPDATE_THRESHOLD) {
         // Clear voltage area
         M5.Lcd.fillRect(0, 70, 320, 60, BLACK);
         
@@ -457,7 +524,7 @@ void displayVoltage() {
     
     // Update FET temperature in Fahrenheit
     float fetTempF = (vescFetTemp * 9.0 / 5.0) + 32.0;
-    if (abs(vescFetTemp - lastDisplayedFetTemp) > 0.5) { // Only update if change > 0.5°C
+    if (abs(vescFetTemp - lastDisplayedFetTemp) > TEMP_UPDATE_THRESHOLD) {
         // Clear temp area
         M5.Lcd.fillRect(0, 140, 320, 30, BLACK);
         
@@ -474,7 +541,7 @@ void displayVoltage() {
     
     // Update M5Stack battery level in lower right
     int batteryLevel = M5.Axp.GetBatteryLevel();
-    if (abs(batteryLevel - lastBatteryLevel) > 2 || lastBatteryLevel == -1) { // Update if change > 2%
+    if (abs(batteryLevel - lastBatteryLevel) > BATTERY_UPDATE_THRESHOLD || lastBatteryLevel == -1) {
         // Clear battery area (lower right)
         M5.Lcd.fillRect(220, 195, 100, 20, BLACK);
         
@@ -497,8 +564,15 @@ void displayVoltage() {
     // Update status text (data age) in lower left
     String statusText;
     unsigned long timeSinceUpdate = millis() - lastVoltageUpdate;
-    if (timeSinceUpdate > 5000) {
-        statusText = "No data";
+    unsigned long timeSinceConnection = millis() - connectionStartTime;
+    
+    if (timeSinceUpdate > VESC_DATA_STALE_TIMEOUT_MS) {
+        if (timeSinceConnection <= CONNECTION_GRACE_PERIOD_MS) {
+            // During grace period, show waiting message
+            statusText = "Waiting...";
+        } else {
+            statusText = "No data";
+        }
     } else {
         statusText = String(timeSinceUpdate / 1000) + "s ago";
     }
@@ -509,8 +583,12 @@ void displayVoltage() {
         M5.Lcd.fillRect(10, 195, 100, 20, BLACK);
         
         M5.Lcd.setTextSize(1);
-        if (timeSinceUpdate > 5000) {
-            M5.Lcd.setTextColor(RED, BLACK);
+        if (timeSinceUpdate > VESC_DATA_STALE_TIMEOUT_MS) {
+            if (timeSinceConnection <= CONNECTION_GRACE_PERIOD_MS) {
+                M5.Lcd.setTextColor(YELLOW, BLACK);  // Yellow for waiting during grace period
+            } else {
+                M5.Lcd.setTextColor(RED, BLACK);  // Red for no data after grace period
+            }
         } else {
             M5.Lcd.setTextColor(CYAN, BLACK);
         }
@@ -531,14 +609,17 @@ void performBLEScan() {
     M5.Lcd.setTextColor(WHITE, BLACK);
     M5.Lcd.setCursor(10, 50);
     M5.Lcd.println("Scanning for devices...");
+    M5.Lcd.setCursor(10, 80);
+    M5.Lcd.setTextSize(1);
+    M5.Lcd.printf("(%d seconds)", BLE_SCAN_TIME_SECONDS);
     
     Serial.println("Starting BLE scan...");
     
     BLEScan* pBLEScan = BLEDevice::getScan();
     pBLEScan->clearResults();
     
-    // Scan for 10 seconds
-    BLEScanResults foundDevices = pBLEScan->start(10, false);
+    // Scan for configured duration
+    BLEScanResults foundDevices = pBLEScan->start(BLE_SCAN_TIME_SECONDS, false);
     
     Serial.printf("Scan complete. Found %d total devices, %d UART devices.\n", 
                   foundDevices.getCount(), discoveredDevices.size());
@@ -586,7 +667,71 @@ void loop() {
     // Update M5Stack Core2 system
     M5.update();
     
-    if (isConnected) {
+    if (isReconnecting) {
+        // Handle reconnecting state
+        if (M5.BtnA.wasPressed()) {
+            Serial.println("Button A pressed - Cancel reconnection");
+            isReconnecting = false;
+            lastConnectedDeviceIndex = -1;
+            needsFullRedraw = true;
+            displayDeviceList();
+        }
+        
+        if (M5.BtnB.wasPressed()) {
+            Serial.println("Button B pressed - Retry now");
+            lastReconnectAttempt = 0; // Force immediate retry
+        }
+        
+        // Attempt reconnection at intervals
+        if (millis() - lastReconnectAttempt > RECONNECT_INTERVAL_MS) {
+            Serial.println("Attempting to reconnect...");
+            lastReconnectAttempt = millis();
+            
+            // Try to reconnect to the last device
+            if (lastConnectedDeviceIndex >= 0 && lastConnectedDeviceIndex < discoveredDevices.size()) {
+                if (connectToVESC(lastConnectedDeviceIndex)) {
+                    Serial.println("Reconnection successful!");
+                    needsFullRedraw = true;
+                    isReconnecting = false;
+                    connectionStartTime = millis();  // Reset grace period for reconnection
+                    lastVoltageUpdate = millis();  // Reset data timeout
+                } else {
+                    Serial.println("Reconnection failed, will retry...");
+                }
+            } else {
+                // Device list might have changed, go back to scanning
+                Serial.println("Device not in list, returning to scan");
+                isReconnecting = false;
+                needsFullRedraw = true;
+                performBLEScan();
+            }
+        }
+        
+        // Update reconnecting display
+        displayReconnecting();
+        
+    } else if (isConnected) {
+        // Check if connection is stale and should trigger reconnection
+        unsigned long timeSinceUpdate = millis() - lastVoltageUpdate;
+        unsigned long timeSinceConnection = millis() - connectionStartTime;
+        
+        // Only check for stale connection after grace period
+        if (timeSinceConnection > CONNECTION_GRACE_PERIOD_MS) {
+            if (timeSinceUpdate > VESC_DATA_STALE_TIMEOUT_MS && !isReconnecting) {
+                Serial.printf("Connection appears lost (no data for %lums), entering reconnection mode\n", timeSinceUpdate);
+                isConnected = false;
+                isReconnecting = true;
+                lastReconnectAttempt = millis();
+                needsFullRedraw = true;
+            }
+        } else {
+            // During grace period, show status but don't disconnect
+            if (timeSinceUpdate > VESC_DATA_STALE_TIMEOUT_MS) {
+                Serial.printf("Waiting for initial data... (grace period: %lds remaining)\n", 
+                             (CONNECTION_GRACE_PERIOD_MS - timeSinceConnection) / 1000);
+            }
+        }
+        
         // Handle connected state
         if (M5.BtnA.wasPressed()) {
             Serial.println("Button A pressed - Disconnect");
@@ -594,6 +739,8 @@ void loop() {
                 pClient->disconnect();
             }
             isConnected = false;
+            isReconnecting = false;
+            lastConnectedDeviceIndex = -1;
             selectedDeviceIndex = 0;
             needsFullRedraw = true;
             displayDeviceList();
@@ -610,14 +757,16 @@ void loop() {
                 pClient->disconnect();
             }
             isConnected = false;
+            isReconnecting = false;
+            lastConnectedDeviceIndex = -1;
             selectedDeviceIndex = 0;
             needsFullRedraw = true;
             displayDeviceList();
         }
         
-        // Auto-request voltage data every 3 seconds
+        // Auto-request voltage data at configured interval
         static unsigned long lastRequest = 0;
-        if (millis() - lastRequest > 3000) {
+        if (millis() - lastRequest > VESC_DATA_REFRESH_MS) {
             sendVESCPacket(COMM_GET_VALUES);
             lastRequest = millis();
         }
